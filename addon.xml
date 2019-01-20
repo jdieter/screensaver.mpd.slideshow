@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<<<<<<< HEAD
 <addon id="screensaver.picture.slideshow" name="Picture Slideshow Screensaver" version="6.0.0" provider-name="Team Kodi">
-=======
-<addon id="screensaver.picture.slideshow" name="Picture Slideshow Screensaver" version="5.0.4" provider-name="Team Kodi">
->>>>>>> 37faa6f... option to disable animations
 	<requires>
 		<import addon="xbmc.python" version="2.25.0"/>
 		<import addon="script.module.elementtree" version="1.2.8" />
@@ -116,8 +112,16 @@
 		<platform>all</platform>
 		<license>GNU GENERAL PUBLIC LICENSE Version 2</license>
 		<forum>http://forum.kodi.tv/showthread.php?tid=154032</forum>
+<<<<<<< HEAD
 		<website></website>
 		<email></email>
 		<source>https://github.com/XBMC-Addons/screensaver.xbmc.slideshow</source>
+=======
+		<source>https://gitlab.com/ronie/screensaver.xbmc.slideshow</source>
+		<assets>
+			<icon>resources/icon.png</icon>
+			<fanart>resources/fanart.jpg</fanart>
+		</assets>
+>>>>>>> 0eeb795... cosmetics
 	</extension>
 </addon>
