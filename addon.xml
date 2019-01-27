@@ -111,17 +111,12 @@
 		<language></language>
 		<platform>all</platform>
 		<license>GNU GENERAL PUBLIC LICENSE Version 2</license>
-		<forum>http://forum.kodi.tv/showthread.php?tid=154032</forum>
-<<<<<<< HEAD
-		<website></website>
-		<email></email>
 		<source>https://github.com/XBMC-Addons/screensaver.xbmc.slideshow</source>
-=======
+		<forum>https://forum.kodi.tv/showthread.php?tid=154032</forum>
 		<source>https://gitlab.com/ronie/screensaver.xbmc.slideshow</source>
 		<assets>
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.jpg</fanart>
 		</assets>
->>>>>>> 0eeb795... cosmetics
 	</extension>
 </addon>
