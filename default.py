@@ -3,10 +3,10 @@ import xbmc, xbmcaddon
 
 ADDON        = xbmcaddon.Addon()
 ADDONID      = ADDON.getAddonInfo('id')
-CWD          = ADDON.getAddonInfo('path').decode("utf-8")
+CWD          = ADDON.getAddonInfo('path')
 ADDONVERSION = ADDON.getAddonInfo('version')
 LANGUAGE     = ADDON.getLocalizedString
-RESOURCE     = xbmc.translatePath( os.path.join( CWD, 'resources', 'lib' ).encode("utf-8") ).decode("utf-8")
+RESOURCE     = xbmc.translatePath(os.path.join(CWD, 'resources', 'lib'))
 
 sys.path.append(RESOURCE)
 

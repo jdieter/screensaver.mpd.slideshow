@@ -8,16 +8,14 @@ LANGUAGE = sys.modules[ '__main__' ].LANGUAGE
 
 # supported image types by the screensaver
 IMAGE_TYPES = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif', '.pcx', '.bmp', '.tga', '.ico', '.nef')
-CACHEFOLDER = xbmc.translatePath(xbmcaddon.Addon().getAddonInfo('profile')).decode('utf-8')
+CACHEFOLDER = xbmc.translatePath(ADDON.getAddonInfo('profile'))
 CACHEFILE   = os.path.join(CACHEFOLDER, '%s')
 RESUMEFILE  = os.path.join(CACHEFOLDER, 'offset')
-ASFILE      = xbmc.translatePath('special://profile/advancedsettings.xml').decode('utf-8')
+ASFILE      = xbmc.translatePath('special://profile/advancedsettings.xml')
 
 def log(txt):
-    if isinstance (txt,str):
-        txt = txt.decode('utf-8')
-    message = u'%s: %s' % (ADDONID, txt)
-    xbmc.log(msg=message.encode('utf-8'), level=xbmc.LOGDEBUG)
+    message = '%s: %s' % (ADDONID, txt)
+    xbmc.log(msg=message, level=xbmc.LOGDEBUG)
 
 def checksum(path):
     return hashlib.md5(path).hexdigest()

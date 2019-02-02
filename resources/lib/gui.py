@@ -13,11 +13,14 @@
 # *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 # *  http://www.gnu.org/copyleft/gpl.html
 
-import random, copy, threading
-import xbmcgui, xbmcaddon
-import EXIFvfs
+import re
+import random
+import copy
+import threading
+import xbmcgui
+import xbmcaddon
+import exifreadvfs
 from iptcinfovfs import IPTCInfo
-from XMPvfs import XMP_Tags
 from xml.dom.minidom import parse
 from utils import *
 import json
@@ -25,7 +28,7 @@ import json
 ADDON    = sys.modules[ '__main__' ].ADDON
 ADDONID  = sys.modules[ '__main__' ].ADDONID
 CWD      = sys.modules[ '__main__' ].CWD
-SKINDIR  = xbmc.getSkinDir().decode('utf-8')
+SKINDIR  = xbmc.getSkinDir()
 
 # images types that can contain exif/iptc data
 EXIF_TYPES  = ('.jpg', '.jpeg', '.tif', '.tiff')
@@ -166,13 +169,13 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 iptc_de = False
                 iptc_ke = False
                 if self.slideshow_type == '2' and ((self.slideshow_date == 'true') or (self.slideshow_iptc == 'true')) and (os.path.splitext(img[0])[1].lower() in EXIF_TYPES):
-                    imgfile = xbmcvfs.File(img[0])
                     # get exif date
                     if self.slideshow_date == 'true':
+                        exiffile = xbmcvfs.File(img[0])
                         try:
-                            exiftags = EXIFvfs.process_file(imgfile, details=False, stop_tag='DateTimeOriginal')
-                            if exiftags.has_key('EXIF DateTimeOriginal'):
-                                datetime = str(exiftags['EXIF DateTimeOriginal']).decode('utf-8')
+                            exiftags = exifreadvfs.process_file(exiffile, details=False, stop_tag='DateTimeOriginal')
+                            if 'EXIF DateTimeOriginal' in exiftags:
+                                datetime = bytes(exiftags['EXIF DateTimeOriginal'].values).decode('utf-8')
                                 # sometimes exif date returns useless data, probably no date set on camera
                                 if datetime == '0000:00:00 00:00:00':
                                     datetime = ''
@@ -192,37 +195,50 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                                     exif = True
                         except:
                             pass
+                        exiffile.close()
                     # get iptc title, description and keywords
                     if self.slideshow_iptc == 'true':
+                        iptcfile = xbmcvfs.File(img[0])
                         try:
-                            iptc = IPTCInfo(imgfile)
-                            iptctags = iptc.data
-                            if iptctags.has_key(105):
-                                title = iptctags[105].decode('utf-8')
+                            iptc = IPTCInfo(iptcfile)
+                            if 105 in iptc.data and iptc.data[105]:
+                                title = bytes(iptc.data[105]).decode('utf-8')
                                 iptc_ti = True
-                            if iptctags.has_key(120):
-                                description = iptctags[120].decode('utf-8')
+                            if 120 in iptc.data and iptc.data[120]:
+                                description = bytes(iptc.data[120]).decode('utf-8')
                                 iptc_de = True
-                            if iptctags.has_key(25):
-                                keywords = ', '.join(iptctags[25]).decode('utf-8')
+                            if 25 in iptc.data and iptc.data[25]:
+                                tags = []
+                                for tag in iptc.data[25]:
+                                    tags.append(bytes(tag).decode('utf-8'))
+                                keywords = ', '.join(tags)
                                 iptc_ke = True
                         except:
                             pass
+                        iptcfile.close()
+                        # get xmp title, description and subject
                         if (not iptc_ti or not iptc_de or not iptc_ke):
                             try:
-                                tags = XMP_Tags().get_xmp(img[0]) # passing the imgfile object does not work for some reason
-                                if (not iptc_ti) and tags.has_key('dc:title'):
-                                    title = tags['dc:title']
+                                # why do i need to recreate the file object?
+                                xmpfile = xbmcvfs.File(img[0])
+                                data = xmpfile.readBytes().decode('cp437')
+                                titlematch = re.search(r'<dc:title.*?rdf:Alt.*?rdf:li.*?>(.*?)<', data, flags=re.DOTALL)
+                                if titlematch and not iptc_ti:
+                                    title = titlematch.group(1)
                                     iptc_ti = True
-                                if (not iptc_de) and tags.has_key('dc:description'):
-                                    description = tags['dc:description']
+                                descmatch = re.search(r'<dc:description.*?rdf:Alt.*?rdf:li.*?>(.*?)<', data, flags=re.DOTALL)
+                                if descmatch and not iptc_de:
+                                    description = descmatch.group(1)
                                     iptc_de = True
-                                if (not iptc_ke) and tags.has_key('dc:subject'):
-                                    keywords = tags['dc:subject'].replace('||',', ')
+                                subjmatch = re.search(r'<dc:subject.*?rdf:Bag.*?>(.*?)</rdf:Bag', data, flags=re.DOTALL)
+                                if subjmatch and not iptc_ke:
+                                    subjectpart = ''.join(subjmatch.group(1).split())
+                                    subjectgroup = subjectpart.replace('<rdf:li>','').split('</rdf:li>')
+                                    keywords = ' '.join(subjectgroup)
                                     iptc_ke = True
                             except:
                                 pass
-                    imgfile.close()
+                            xmpfile.close()
                 # display exif date if we have one
                 if exif:
                     self.datelabel.setLabel('[I]' + datetime + '[/I]')
@@ -231,9 +247,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                     self.datelabel.setVisible(False)
                 # display iptc data if we have any
                 if iptc_ti or iptc_de or iptc_ke:
-                    self.textbox.setText(
-                        '[CR]'.join([title, keywords] if title == description
-                                    else [title, description, keywords]))
+                    self.textbox.setText('[CR]'.join([title, keywords] if title == description else [title, description, keywords]))
                     self.textbox.setVisible(True)
                 else:
                     self.textbox.setVisible(False)
@@ -260,7 +274,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                     # add slide anim
                     self._set_prop('Slide%d' % order[0], '0')
                     self._set_prop('Slide%d' % order[1], '1')
-                elif self.slideshow_effect == '1' or self.slideshow_effect == '2':
+                else:
                     # add random slide/zoom anim
                     if self.slideshow_effect == '2':
                         # add random slide/zoom anim
@@ -297,7 +311,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         log('slideshow type: %s' % self.slideshow_type)
 	    # check if we have an image folder, else fallback to video fanart
         if self.slideshow_type == '2':
-            hexfile = checksum(self.slideshow_path) # check if path has changed, so we can create a new cache at startup
+            hexfile = checksum(self.slideshow_path.encode('utf-8')) # check if path has changed, so we can create a new cache at startup
             log('image path: %s' % self.slideshow_path)
             log('update: %s' % update)
             if (not xbmcvfs.exists(CACHEFILE % hexfile)) or update: # create a new cache if no cache exits or during the background scan
@@ -321,9 +335,8 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             self.items = []
             for method in methods:
                 json_query = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "' + method[0] + '", "params": {"properties": ["fanart"]}, "id": 1}')
-                json_query = unicode(json_query, 'utf-8', errors='ignore')
                 json_response = json.loads(json_query)
-                if json_response.has_key('result') and json_response['result'] != None and json_response['result'].has_key(method[1]):
+                if 'result' in json_response and json_response['result'] != None and method[1] in json_response['result']:
                     for item in json_response['result'][method[1]]:
                         if item['fanart']:
                             self.items.append([item['fanart'], item['label']])
@@ -390,16 +403,15 @@ class Screensaver(xbmcgui.WindowXMLDialog):
     def _get_animspeed(self):
         # find the skindir
         json_query = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "Addons.GetAddonDetails", "params": {"addonid": "%s", "properties": ["path"]}, "id": 1}' % SKINDIR)
-        json_query = unicode(json_query, 'utf-8', errors='ignore')
         json_response = json.loads(json_query)
-        if json_response.has_key('result') and (json_response['result'] != None) and json_response['result'].has_key('addon') and json_response['result']['addon'].has_key('path'):
+        if 'result' in json_response and (json_response['result'] != None) and 'addon' in json_response['result'] and 'path' in json_response['result']['addon']:
             skinpath = json_response['result']['addon']['path']
         else:
             log('failed to retrieve skin path')
             log(SKINDIR)
             log(json_query)
             return
-        skinxml = xbmc.translatePath( os.path.join( skinpath, 'addon.xml' ).encode('utf-8') ).decode('utf-8')
+        skinxml = xbmc.translatePath(os.path.join(skinpath, 'addon.xml'))
         try:
             # parse the skin addon.xml
             self.xml = parse(skinxml)
