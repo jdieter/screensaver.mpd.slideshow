@@ -111,7 +111,6 @@ msgstr ""
 msgctxt "#30025"
 msgid "Additional"
 msgstr ""
-msgstr ""
 
 msgctxt "#30026"
 msgid "Resume slideshow from last position"
