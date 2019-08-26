@@ -4,6 +4,12 @@ v6.0.1
 v6.0.0
 - changes for python 3
 
+v5.0.9
+- fix splash image kept spinning in the background, eating up cpu
+
+v5.0.8
+- re-add option to disable animations
+
 v5.0.4
 - add option to disable animations
 
