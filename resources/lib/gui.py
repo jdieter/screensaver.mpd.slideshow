@@ -66,7 +66,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self.adj_time = int(101000 * speedup)
         # get the images
         self._get_items()
-        if self.slideshow_type == 2 and self.slideshow_random and self.slideshow_resume:
+        if self.slideshow_type == 2 and not self.slideshow_random and self.slideshow_resume:
             self._get_offset()
         if self.items:
             # hide startup splash
@@ -88,7 +88,8 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self.slideshow_type   = ADDON.getSettingInt('type')
         self.slideshow_path   = ADDON.getSettingString('path')
         self.slideshow_effect = ADDON.getSettingInt('effect')
-        self.slideshow_time   = ADDON.getSettingInt('time')
+        # labelenum is broken, we use enum and get the index (index 0 = 2 secs)
+        self.slideshow_time   = ADDON.getSettingInt('time') + 2
         # convert float to hex value usable by the skin
         self.slideshow_dim    = hex(int('%.0f' % (float(100 - ADDON.getSettingInt('level')) * 2.55)))[2:] + 'ffffff'
         self.slideshow_random = ADDON.getSettingBool('random')
@@ -448,7 +449,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self._clear_prop('Splash')
         self._clear_prop('Background')
         # save the current position  to file
-        if self.slideshow_type == 2 and self.slideshow_random and self.slideshow_resume:
+        if self.slideshow_type == 2 and not self.slideshow_random and self.slideshow_resume:
             self._save_offset()
         self.close()
 
