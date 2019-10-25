@@ -102,6 +102,13 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self.slideshow_bg     = ADDON.getSettingBool('background')
         # select which image controls from the xml we are going to use
         if self.slideshow_scale:
+            self.image1 = self.getControl(3)
+            self.image2 = self.getControl(4)
+            self.getControl(1).setVisible(False)
+            self.getControl(2).setVisible(False)
+            self.getControl(5).setVisible(False)
+            self.getControl(6).setVisible(False)
+        else:
             self.image1 = self.getControl(1)
             self.image2 = self.getControl(2)
             self.getControl(3).setVisible(False)
@@ -109,13 +116,6 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             if self.slideshow_bg:
                 self.image3 = self.getControl(5)
                 self.image4 = self.getControl(6)
-        else:
-            self.image1 = self.getControl(3)
-            self.image2 = self.getControl(4)
-            self.getControl(1).setVisible(False)
-            self.getControl(2).setVisible(False)
-            self.getControl(5).setVisible(False)
-            self.getControl(6).setVisible(False)
         if self.slideshow_name == 0:
             self.getControl(99).setVisible(False)
         else:
@@ -150,7 +150,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 # add image to gui
                 cur_img.setImage(img[0],False)
                 # add background image to gui
-                if self.slideshow_scale and self.slideshow_bg:
+                if (not self.slideshow_scale) and self.slideshow_bg:
                     if order[0] == 1:
                         self.image3.setImage(img[0],False)
                     else:
