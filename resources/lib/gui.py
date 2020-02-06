@@ -13,6 +13,8 @@
 # *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 # *  http://www.gnu.org/copyleft/gpl.html
 
+from __future__ import unicode_literals
+
 import re
 import random
 import copy
@@ -20,6 +22,8 @@ import threading
 import xbmcgui
 import xbmcaddon
 import exifreadvfs
+import mutagen
+import mpd
 from iptcinfovfs import IPTCInfo
 from xml.dom.minidom import parse
 from utils import *
@@ -66,6 +70,14 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self.adj_time = int(101000 * speedup)
         # get the images
         self._get_items()
+        self.mpd_data = {
+            'title': "",
+            'album': "",
+            'artist': "",
+            'file': "",
+            'state': "unknown"
+        }
+        self.cover_path = None
         if self.slideshow_type == 2 and not self.slideshow_random and self.slideshow_resume:
             self._get_offset()
         if self.items:
@@ -121,7 +133,12 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         else:
             self.namelabel = self.getControl(99)
         self.datelabel = self.getControl(100)
-        self.textbox = self.getControl(101)
+        self.songgroup = self.getControl(101)
+        self.covertexture = self.getControl(102)
+        self.titlelabel = self.getControl(103)
+        self.albumlabel = self.getControl(104)
+        self.artistlabel = self.getControl(105)
+
         # set the dim property
         self._set_prop('Dim', self.slideshow_dim)
         # show music info during slideshow if enabled
@@ -131,10 +148,55 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         if self.slideshow_bg:
             self._set_prop('Background', 'show')
 
+    def _get_image_from_song(self, path):
+        if self.cover_path != path:
+            # Don't reload cover image if it's already loaded
+            if path == "":
+                self.cover_path = path
+                self.covertexture.setVisible(False)
+                return
+
+            try:
+                img = mutagen.File(os.path.join('/var/lib/music', path))['APIC:Front cover']
+            except:
+                try:
+                    img = mutagen.File(os.path.join('/var/lib/music', path))['APIC']
+                except:
+                    log("Unable to extract cover art from %s" % os.path.join('/var/lib/music', path))
+                    try:
+                        log("Tags:", mutagen.File(os.path.join('/var/lib/music', path)))
+                    except:
+                        log("Unable to extract any tags from file")
+                    self.cover_path = path
+                    self.covertexture.setVisible(False)
+                    return
+            filename = "/tmp/coverart-%s" % (path.replace(' ', '-').replace('/', '-'))
+            f = open(filename, "wb")
+            f.write(img.data)
+            f.close()
+            self.covertexture.setImage(filename, False)
+            self.cover_path = path
+            self.covertexture.setVisible(True)
+
+    def _update_song_info(self):
+        # display song info if there is any
+        self.titlelabel.setLabel(self.mpd_data['title']) 
+        self.albumlabel.setLabel(self.mpd_data['album']) 
+        self.artistlabel.setLabel(self.mpd_data['artist'])
+        self._get_image_from_song(self.mpd_data['file'])
+
+        if self.mpd_data['state'] == 'play':
+            self.songgroup.setVisible(True)
+        else:
+            self.songgroup.setVisible(False)
+
     def _start_show(self, items):
         # we need to start the update thread after the deep copy of self.items finishes
         thread = img_update(data=self._get_items)
         thread.start()
+        music_thread = mpd_update(server="localhost", port=6600, data=self.mpd_data)
+        music_thread.start()
+
         # start with image 1
         cur_img = self.image1
         order = [1,2]
@@ -246,12 +308,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                     self.datelabel.setVisible(True)
                 else:
                     self.datelabel.setVisible(False)
-                # display iptc data if we have any
-                if iptc_ti or iptc_de or iptc_ke:
-                    self.textbox.setText('[CR]'.join([title, keywords] if title == description else [title, description, keywords]))
-                    self.textbox.setVisible(True)
-                else:
-                    self.textbox.setVisible(False)
+
                 # get the file or foldername if enabled in settings
                 if self.slideshow_name != 0:
                     if self.slideshow_name == 1:
@@ -298,8 +355,9 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 count = self.slideshow_time - 1
                 # display the image for the specified amount of time
                 while (not self.Monitor.abortRequested()) and (not self.stop) and count > 0:
-                    count -= 1
-                    xbmc.sleep(1000)
+                    self._update_song_info()
+                    count -= 0.2
+                    xbmc.sleep(200)
                 # break out of the for loop if onScreensaverDeactivated is called
                 if  self.stop or self.Monitor.abortRequested():
                     break
@@ -471,6 +529,39 @@ class img_update(threading.Thread):
                 count += 1
                 if self.Monitor.abortRequested() or self.stop:
                     return
+
+    def _exit(self):
+        # exit when onScreensaverDeactivated gets called
+        self.stop = True
+
+class mpd_update(threading.Thread):
+    def __init__( self, *args, **kwargs ):
+        self.server = kwargs['server']
+        self.port = kwargs['port']
+        self.mpd_data = kwargs['data']
+        threading.Thread.__init__(self)
+        self.stop = False
+        self.Monitor = MyMonitor(action = self._exit)
+
+    def run(self):
+        log("Connecting to %s:%s" % (self.server, self.port))
+        client = mpd.MPDClient(use_unicode=True)
+        client.connect(self.server, self.port)
+
+        while (not self.Monitor.abortRequested()) and (not self.stop):
+            try:
+                self.mpd_data['state'] = client.status()['state']
+            except:
+                self.mpd_data['state'] = 'unknown'
+            for key in ('title', 'album', 'artist', 'file'):
+                try:
+                    self.mpd_data[key] = client.currentsong()[key]
+                except KeyError:
+                    log("Unable to lookup %s" % key)
+                    self.mpd_data[key] = ""
+            xbmc.sleep(500) 
+            if self.Monitor.abortRequested() or self.stop:
+                return
 
     def _exit(self):
         # exit when onScreensaverDeactivated gets called
