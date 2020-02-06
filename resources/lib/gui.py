@@ -19,6 +19,7 @@ import re
 import random
 import copy
 import threading
+import base64
 import xbmcgui
 import xbmcaddon
 import exifreadvfs
@@ -70,6 +71,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         self.adj_time = int(101000 * speedup)
         # get the images
         self._get_items()
+        self.old_filename = None
         self.mpd_data = {
             'title': "",
             'album': "",
@@ -150,31 +152,68 @@ class Screensaver(xbmcgui.WindowXMLDialog):
 
     def _get_image_from_song(self, path):
         if self.cover_path != path:
+            # Cleanup previous cover art image
+            if self.old_filename:
+                try:
+                    os.unlink(self.old_filename)
+                except OSError:
+                    pass
+                self.old_filename = None
+
             # Don't reload cover image if it's already loaded
             if path == "":
                 self.cover_path = path
                 self.covertexture.setVisible(False)
                 return
 
+            img = None
+
+            # Try APIC:Front cover first
             try:
-                img = mutagen.File(os.path.join('/var/lib/music', path))['APIC:Front cover']
+                img = mutagen.File(os.path.join('/var/lib/music', path))['APIC:Front cover'].data
             except:
+                pass
+
+            # Try generic APIC next
+            if img is None:
                 try:
-                    img = mutagen.File(os.path.join('/var/lib/music', path))['APIC']
+                    img = mutagen.File(os.path.join('/var/lib/music', path))['APIC'].data
                 except:
-                    log("Unable to extract cover art from %s" % os.path.join('/var/lib/music', path))
-                    try:
-                        log("Tags:", mutagen.File(os.path.join('/var/lib/music', path)))
-                    except:
-                        log("Unable to extract any tags from file")
-                    self.cover_path = path
-                    self.covertexture.setVisible(False)
-                    return
+                    pass
+
+            # Try vorbis METADATA_BLOCK_PICTURE next
+            if img is None:
+                try:
+                    data = base64.b64decode(mutagen.File(os.path.join('/var/lib/music', path))['METADATA_BLOCK_PICTURE'][0])
+                    picture = mutagen.flac.Picture(data)
+                    img = picture.data
+                except:
+                    pass
+
+            # Try cover file last
+            if img is None:
+                try:
+                    with open(os.path.join(os.path.dirname(os.path.join('/var/lib/music', path)), 'cover.jpg'), 'rb') as f:
+                        img = f.read()
+                except:
+                    pass
+
+            # Can't find cover art, give up
+            if img is None:
+                log("Unable to extract cover art from %s" % os.path.join('/var/lib/music', path))
+                try:
+                    log(mutagen.File(os.path.join('/var/lib/music', path)).keys())
+                except:
+                    log("Unable to extract any tags from file")
+                self.cover_path = path
+                self.covertexture.setVisible(False)
+                return
+
             filename = "/tmp/coverart-%s" % (path.replace(' ', '-').replace('/', '-'))
-            f = open(filename, "wb")
-            f.write(img.data)
-            f.close()
+            with open(filename, "wb") as f:
+                f.write(img)
             self.covertexture.setImage(filename, False)
+            self.old_filename = filename
             self.cover_path = path
             self.covertexture.setVisible(True)
 
