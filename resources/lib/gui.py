@@ -132,14 +132,19 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 self.image4 = self.getControl(6)
         if self.slideshow_name == 0:
             self.getControl(99).setVisible(False)
+            self.getControl(152).setVisible(False)
         else:
             self.namelabel = self.getControl(99)
+            self.namebackground = self.getControl(152)
+
         self.datelabel = self.getControl(100)
         self.songgroup = self.getControl(101)
         self.covertexture = self.getControl(102)
         self.titlelabel = self.getControl(103)
         self.albumlabel = self.getControl(104)
         self.artistlabel = self.getControl(105)
+        self.songinfogroup = self.getControl(151)
+        self.backgroundtexture = self.getControl(150)
 
         # set the dim property
         self._set_prop('Dim', self.slideshow_dim)
@@ -164,6 +169,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             if path == "":
                 self.cover_path = path
                 self.covertexture.setVisible(False)
+                self.songinfogroup.setPosition(0, 0)
                 return
 
             img = None
@@ -207,6 +213,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                     log("Unable to extract any tags from file")
                 self.cover_path = path
                 self.covertexture.setVisible(False)
+                self.songinfogroup.setPosition(0, 0)
                 return
 
             filename = "/tmp/coverart-%s" % (path.replace(' ', '-').replace('/', '-'))
@@ -215,6 +222,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             self.covertexture.setImage(filename, False)
             self.old_filename = filename
             self.cover_path = path
+            self.songinfogroup.setPosition(90, 0)
             self.covertexture.setVisible(True)
 
     def _update_song_info(self):
@@ -228,6 +236,16 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             self.songgroup.setVisible(True)
         else:
             self.songgroup.setVisible(False)
+
+        maxlength = len(self.titlelabel.getLabel())
+        if len(self.albumlabel.getLabel()) > maxlength:
+            maxlength = len(self.albumlabel.getLabel())
+        if len(self.artistlabel.getLabel()) > maxlength:
+            maxlength = len(self.artistlabel.getLabel())
+        background_left = -644 + self.songinfogroup.getX() + (maxlength * 14)
+        if background_left > 0:
+            background_left = 0
+        self.backgroundtexture.setPosition(background_left, -60)
 
     def _start_show(self, items):
         # we need to start the update thread after the deep copy of self.items finishes
@@ -366,6 +384,10 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                             ROOT, FOLDER = os.path.split(os.path.dirname(img[0]))
                             NAME = FOLDER + ' / ' + img[1]
                     self.namelabel.setLabel(NAME)
+                    nameback_left = 1270 - len(NAME)*14
+                    if nameback_left < 626:
+                        nameback_left = 626
+                    self.namebackground.setPosition(nameback_left , 625)
                 # set animations
                 if self.slideshow_effect == 0:
                     # add slide anim
