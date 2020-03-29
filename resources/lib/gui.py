@@ -216,7 +216,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 self.songinfogroup.setPosition(0, 0)
                 return
 
-            filename = "/tmp/coverart-%s" % (path.replace(' ', '-').replace('/', '-'))
+            filename = "/tmp/coverart-%s" % (path.encode('ascii', 'ignore').replace(' ', '-').replace('/', '-'))
             with open(filename, "wb") as f:
                 f.write(img)
             self.covertexture.setImage(filename, False)
