@@ -22,7 +22,7 @@ from iptcinfo3 import IPTCInfo
 import xbmcgui
 from lib.utils import *
 
-import mpd, mutagen
+import mpd
 import base64
 
 ADDON = xbmcaddon.Addon()
@@ -75,7 +75,8 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             'album': "",
             'artist': "",
             'file': "",
-            'state': "unknown"
+            'state': "unknown",
+            'album_art': None
         }
         self.cover_path = None
         if self.slideshow_type == 2 and not self.slideshow_random and self.slideshow_resume:
@@ -153,7 +154,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         if self.slideshow_bg:
             self._set_prop('Background', 'show')
 
-    def _get_image_from_song(self, path):
+    def _get_image_from_song(self, path, img):
         if self.cover_path != path:
             # Cleanup previous cover art image
             if self.old_filename:
@@ -170,47 +171,9 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 self.songinfogroup.setPosition(0, 0)
                 return
 
-            img = None
-
-            img = self.mpd_client.albumart(path)
-
-            # Try APIC:Front cover first
-            try:
-                img = mutagen.File(os.path.join('/var/lib/music', path))['APIC:Front cover'].data
-            except:
-                pass
-
-            # Try generic APIC next
-            if img is None:
-                try:
-                    img = mutagen.File(os.path.join('/var/lib/music', path))['APIC'].data
-                except:
-                    pass
-
-            # Try vorbis METADATA_BLOCK_PICTURE next
-            if img is None:
-                try:
-                    data = base64.b64decode(mutagen.File(os.path.join('/var/lib/music', path))['METADATA_BLOCK_PICTURE'][0])
-                    picture = mutagen.flac.Picture(data)
-                    img = picture.data
-                except:
-                    pass
-
-            # Try cover file last
-            if img is None:
-                try:
-                    with open(os.path.join(os.path.dirname(os.path.join('/var/lib/music', path)), 'cover.jpg'), 'rb') as f:
-                        img = f.read()
-                except:
-                    pass
-
             # Can't find cover art, give up
             if img is None:
-                log("Unable to extract cover art from %s" % os.path.join('/var/lib/music', path))
-                try:
-                    log(list(mutagen.File(os.path.join('/var/lib/music', path)).keys()))
-                except:
-                    log("Unable to extract any tags from file")
+                log("Unable to get cover art from mpd")
                 self.cover_path = path
                 self.covertexture.setVisible(False)
                 self.songinfogroup.setPosition(0, 0)
@@ -227,11 +190,10 @@ class Screensaver(xbmcgui.WindowXMLDialog):
 
     def _update_song_info(self):
         # display song info if there is any
-        log(self.mpd_data.keys())
         self.titlelabel.setLabel(self.mpd_data['title']) 
         self.albumlabel.setLabel(self.mpd_data['album']) 
         self.artistlabel.setLabel(self.mpd_data['artist'])
-        self._get_image_from_song(self.mpd_data['file'])
+        self._get_image_from_song(self.mpd_data['file'], self.mpd_data['album_art'])
 
         if self.mpd_data['state'] == 'play':
             self.songgroup.setVisible(True)
@@ -617,12 +579,18 @@ class mpd_update(threading.Thread):
                 self.mpd_data['state'] = client.status()['state']
             except:
                 self.mpd_data['state'] = 'unknown'
+            prev_file = self.mpd_data['file']
             for key in ('title', 'album', 'artist', 'file'):
                 try:
                     self.mpd_data[key] = client.currentsong()[key]
                 except KeyError:
                     log("Unable to lookup %s" % key)
                     self.mpd_data[key] = ""
+            if self.mpd_data['file'] != prev_file:
+                try:
+                    self.mpd_data['album_art'] = client.readpicture(client.currentsong()['file'])['binary']
+                except KeyError:
+                    self.mpd_data['album_art'] = None
             xbmc.sleep(500) 
             if self.Monitor.abortRequested() or self.stop:
                 return
