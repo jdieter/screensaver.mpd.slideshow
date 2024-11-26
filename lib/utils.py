@@ -1,21 +1,28 @@
-import sys, os, re, urllib, hashlib
-import xbmc, xbmcvfs, xbmcaddon
+import hashlib
+import os
+import json
+import re
+import sys
+import urllib
+import xbmc
+import xbmcvfs
+import xbmcaddon
 import xml.etree.ElementTree as etree
 
-ADDON    = sys.modules[ '__main__' ].ADDON
-ADDONID  = sys.modules[ '__main__' ].ADDONID
-LANGUAGE = sys.modules[ '__main__' ].LANGUAGE
+ADDON    = xbmcaddon.Addon()
+ADDONID = ADDON.getAddonInfo('id')
+LANGUAGE = ADDON.getLocalizedString
 
 # supported image types by the screensaver
-IMAGE_TYPES = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif', '.pcx', '.bmp', '.tga', '.ico', '.nef')
-CACHEFOLDER = xbmc.translatePath(ADDON.getAddonInfo('profile'))
-CACHEFILE   = os.path.join(CACHEFOLDER, '%s')
+IMAGE_TYPES = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif', '.pcx', '.bmp', '.tga', '.ico', '.nef', '.webp', '.jp2', '.apng')
+CACHEFOLDER = xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))
+CACHEFILE = os.path.join(CACHEFOLDER, 'cache_%s')
 RESUMEFILE  = os.path.join(CACHEFOLDER, 'offset')
-ASFILE      = xbmc.translatePath('special://profile/advancedsettings.xml')
+ASFILE      = xbmcvfs.translatePath('special://profile/advancedsettings.xml')
 
 def log(txt):
     message = '%s: %s' % (ADDONID, txt)
-    xbmc.log(msg=message, level=xbmc.LOGDEBUG)
+    xbmc.log(msg=message, level=xbmc.LOGINFO)
 
 def checksum(path):
     return hashlib.md5(path).hexdigest()
@@ -30,10 +37,10 @@ def create_cache(path, hexfile):
         if item != 'settings.xml':
             xbmcvfs.delete(os.path.join(CACHEFOLDER,item))
     if images:
-        # create index file
+        # create cache file
         try:
             cache = xbmcvfs.File(CACHEFILE % hexfile, 'w')
-            cache.write(str(images))
+            json.dump(images, cache)
             cache.close()
         except:
             log('failed to save cachefile')
@@ -65,11 +72,11 @@ def walk(path):
     else:
         folders.append(path)
     for folder in folders:
-        if xbmcvfs.exists(xbmc.translatePath(folder)):
+        if xbmcvfs.exists(xbmcvfs.translatePath(folder)):
             # get all files and subfolders
             dirs,files = xbmcvfs.listdir(folder)
-            log('dirs: %s' % len(dirs))
-            log('files: %s' % len(files))
+            #log('dirs: %s' % len(dirs))
+            #log('files: %s' % len(files))
             # natural sort
             convert = lambda text: int(text) if text.isdigit() else text
             alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]

@@ -13,26 +13,19 @@
 # *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 # *  http://www.gnu.org/copyleft/gpl.html
 
-from __future__ import unicode_literals
-
-import re
-import random
 import copy
+import random
 import threading
-import base64
-import xbmcgui
-import xbmcaddon
-import exifreadvfs
-import mutagen
-import mpd
-from iptcinfovfs import IPTCInfo
 from xml.dom.minidom import parse
-from utils import *
-import json
+import exifread
+from iptcinfo3 import IPTCInfo
+import xbmcgui
+from lib.utils import *
 
-ADDON    = sys.modules[ '__main__' ].ADDON
-ADDONID  = sys.modules[ '__main__' ].ADDONID
-CWD      = sys.modules[ '__main__' ].CWD
+import mpd, mutagen
+import base64
+
+ADDON = xbmcaddon.Addon()
 SKINDIR  = xbmc.getSkinDir()
 
 # images types that can contain exif/iptc data
@@ -40,24 +33,29 @@ EXIF_TYPES  = ('.jpg', '.jpeg', '.tif', '.tiff')
 
 # random effect list to choose from
 EFFECTLIST = ["('conditional', 'effect=zoom start=100 end=400 center=auto time=%i condition=true'),",
-              "('conditional', 'effect=slide start=1280,0 end=-1280,0 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=-1280,0 end=1280,0 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=0,720 end=0,-720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=0,-720 end=0,720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=1280,720 end=-1280,-720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=-1280,720 end=1280,-720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=1280,-720 end=-1280,720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
-              "('conditional', 'effect=slide start=-1280,-720 end=1280,720 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')"]
+              "('conditional', 'effect=slide start=1920,0 end=-1920,0 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=-1920,0 end=1920,0 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=0,1080 end=0,-1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=0,-1080 end=0,1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=1920,1080 end=-1920,-1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=-1920,1080 end=1920,-1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=1920,-1080 end=-1920,1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')",
+              "('conditional', 'effect=slide start=-1920,-1080 end=1920,1080 time=%i condition=true'), ('conditional', 'effect=zoom start=%i end=%i center=auto time=%i condition=true')"]
 
 # get local dateformat to localize the exif date tag
 DATEFORMAT = xbmc.getRegion('dateshort')
+
+class BinaryFile(xbmcvfs.File):
+    def read(self, numBytes: int = 0) -> bytes:
+        return bytes(self.readBytes(numBytes))
+
 
 class Screensaver(xbmcgui.WindowXMLDialog):
     def __init__( self, *args, **kwargs ):
         pass
 
     def onInit(self):
-        # load constants
+        # load vars
         self._get_vars()
         # get addon settings
         self._get_settings()
@@ -174,6 +172,8 @@ class Screensaver(xbmcgui.WindowXMLDialog):
 
             img = None
 
+            img = self.mpd_client.albumart(path)
+
             # Try APIC:Front cover first
             try:
                 img = mutagen.File(os.path.join('/var/lib/music', path))['APIC:Front cover'].data
@@ -208,7 +208,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             if img is None:
                 log("Unable to extract cover art from %s" % os.path.join('/var/lib/music', path))
                 try:
-                    log(mutagen.File(os.path.join('/var/lib/music', path)).keys())
+                    log(list(mutagen.File(os.path.join('/var/lib/music', path)).keys()))
                 except:
                     log("Unable to extract any tags from file")
                 self.cover_path = path
@@ -216,17 +216,18 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 self.songinfogroup.setPosition(0, 0)
                 return
 
-            filename = "/tmp/coverart-%s" % (path.encode('ascii', 'ignore').replace(' ', '-').replace('/', '-'))
+            filename = "/tmp/coverart-%s" % (path.encode('ascii', 'ignore').decode().replace(' ', '-').replace('/', '-'))
             with open(filename, "wb") as f:
                 f.write(img)
             self.covertexture.setImage(filename, False)
             self.old_filename = filename
             self.cover_path = path
-            self.songinfogroup.setPosition(90, 0)
+            self.songinfogroup.setPosition(135, 0)
             self.covertexture.setVisible(True)
 
     def _update_song_info(self):
         # display song info if there is any
+        log(self.mpd_data.keys())
         self.titlelabel.setLabel(self.mpd_data['title']) 
         self.albumlabel.setLabel(self.mpd_data['album']) 
         self.artistlabel.setLabel(self.mpd_data['artist'])
@@ -242,16 +243,16 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             maxlength = len(self.albumlabel.getLabel())
         if len(self.artistlabel.getLabel()) > maxlength:
             maxlength = len(self.artistlabel.getLabel())
-        background_left = -644 + self.songinfogroup.getX() + (maxlength * 14)
+        background_left = -966 + self.songinfogroup.getX() + (maxlength * 21)
         if background_left > 0:
             background_left = 0
-        self.backgroundtexture.setPosition(background_left, -60)
+        self.backgroundtexture.setPosition(background_left, -90)
 
     def _start_show(self, items):
         # we need to start the update thread after the deep copy of self.items finishes
         thread = img_update(data=self._get_items)
         thread.start()
-        music_thread = mpd_update(server="localhost", port=6600, data=self.mpd_data)
+        music_thread = mpd_update(server="server.local.jdieter.net", port=6600, data=self.mpd_data)
         music_thread.start()
 
         # start with image 1
@@ -291,11 +292,11 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                 if self.slideshow_type == 2 and (self.slideshow_date or self.slideshow_iptc) and (os.path.splitext(img[0])[1].lower() in EXIF_TYPES):
                     # get exif date
                     if self.slideshow_date:
-                        exiffile = xbmcvfs.File(img[0])
+                        exiffile = BinaryFile(img[0])
                         try:
-                            exiftags = exifreadvfs.process_file(exiffile, details=False, stop_tag='DateTimeOriginal')
+                            exiftags = exifread.process_file(exiffile, details=False, stop_tag='DateTimeOriginal')
                             if 'EXIF DateTimeOriginal' in exiftags:
-                                datetime = bytes(exiftags['EXIF DateTimeOriginal'].values).decode('utf-8')
+                                datetime = exiftags['EXIF DateTimeOriginal'].values
                                 # sometimes exif date returns useless data, probably no date set on camera
                                 if datetime == '0000:00:00 00:00:00':
                                     datetime = ''
@@ -318,18 +319,18 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                         exiffile.close()
                     # get iptc title, description and keywords
                     if self.slideshow_iptc:
-                        iptcfile = xbmcvfs.File(img[0])
+                        iptcfile = BinaryFile(img[0])
                         try:
                             iptc = IPTCInfo(iptcfile)
-                            if 105 in iptc.data and iptc.data[105]:
-                                title = bytes(iptc.data[105]).decode('utf-8')
+                            if iptc['headline']:
+                                title = bytes(iptc['headline']).decode('utf-8')
                                 iptc_ti = True
-                            if 120 in iptc.data and iptc.data[120]:
-                                description = bytes(iptc.data[120]).decode('utf-8')
+                            if iptc['caption/abstract']:
+                                description = bytes(iptc['caption/abstract']).decode('utf-8')
                                 iptc_de = True
-                            if 25 in iptc.data and iptc.data[25]:
+                            if iptc['keywords']:
                                 tags = []
-                                for tag in iptc.data[25]:
+                                for tag in iptc['keywords']:
                                     tags.append(bytes(tag).decode('utf-8'))
                                 keywords = ', '.join(tags)
                                 iptc_ke = True
@@ -339,22 +340,21 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                         # get xmp title, description and subject
                         if (not iptc_ti or not iptc_de or not iptc_ke):
                             try:
-                                # why do i need to recreate the file object?
                                 xmpfile = xbmcvfs.File(img[0])
                                 data = xmpfile.readBytes().decode('cp437')
-                                titlematch = re.search(r'<dc:title.*?rdf:Alt.*?rdf:li.*?>(.*?)<', data, flags=re.DOTALL)
+                                xmpdata = re.search(r'<x:xmpmeta.*?>(.*?)</x:xmpmeta', data, flags=re.DOTALL)
+                                if xmpdata:
+                                    titlematch = re.search(r'<dc:title.*?rdf:Alt.*?rdf:li.*?>(.*?)<', xmpdata.group(1), flags=re.DOTALL)
                                 if titlematch and not iptc_ti:
                                     title = titlematch.group(1)
                                     iptc_ti = True
-                                descmatch = re.search(r'<dc:description.*?rdf:Alt.*?rdf:li.*?>(.*?)<', data, flags=re.DOTALL)
+                                    descmatch = re.search(r'<dc:description.*?rdf:Alt.*?rdf:li.*?>(.*?)<', xmpdata.group(1), flags=re.DOTALL)
                                 if descmatch and not iptc_de:
                                     description = descmatch.group(1)
                                     iptc_de = True
-                                subjmatch = re.search(r'<dc:subject.*?rdf:Bag.*?>(.*?)</rdf:Bag', data, flags=re.DOTALL)
+                                    subjmatch = re.search(r'<dc:subject.*?rdf:Bag.*?>(.*?)</rdf:Bag', xmpdata.group(1), flags=re.DOTALL)
                                 if subjmatch and not iptc_ke:
-                                    subjectpart = ''.join(subjmatch.group(1).split())
-                                    subjectgroup = subjectpart.replace('<rdf:li>','').split('</rdf:li>')
-                                    keywords = ' '.join(subjectgroup)
+                                    keywords = ', '.join(subjmatch.group(1).split()).replace('<rdf:li>', '').replace('</rdf:li>', '')
                                     iptc_ke = True
                             except:
                                 pass
@@ -384,10 +384,10 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                             ROOT, FOLDER = os.path.split(os.path.dirname(img[0]))
                             NAME = FOLDER + ' / ' + img[1]
                     self.namelabel.setLabel(NAME)
-                    nameback_left = 1270 - len(NAME)*14
-                    if nameback_left < 626:
-                        nameback_left = 626
-                    self.namebackground.setPosition(nameback_left , 625)
+                    nameback_left = 1905 - len(NAME)*21
+                    if nameback_left < 939:
+                        nameback_left = 939
+                    self.namebackground.setPosition(nameback_left , 938)
                 # set animations
                 if self.slideshow_effect == 0:
                     # add slide anim
@@ -401,8 +401,12 @@ class Screensaver(xbmcgui.WindowXMLDialog):
                     # add fade anim, used for both fade and slide/zoom anim
                     self._set_prop('Fade%d' % order[0], '0')
                     self._set_prop('Fade%d' % order[1], '1')
+                elif self.slideshow_effect == 3:
+                    # we need to hide the images when no effect is selected, add fade effect with time=0
+                    self._set_prop('NoEffectFade%d' % order[0], '0')
+                    self._set_prop('NoEffectFade%d' % order[1], '1')
                 # add fade anim to background images
-                if self.slideshow_bg:
+                if self.slideshow_bg and self.slideshow_effect != 3:
                     self._set_prop('Fade1%d' % order[0], '0')
                     self._set_prop('Fade1%d' % order[1], '1')
                 # define next image
@@ -454,16 +458,16 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         if not self.slideshow_type == 2:
             self.items = []
             for method in methods:
-                json_query = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "' + method[0] + '", "params": {"properties": ["fanart"]}, "id": 1}')
+                json_query = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "' + method[0] + '", "params": {"properties": ["art"]}, "id": 1}')
                 json_response = json.loads(json_query)
                 if 'result' in json_response and json_response['result'] != None and method[1] in json_response['result']:
                     for item in json_response['result'][method[1]]:
-                        if item['fanart']:
-                            self.items.append([item['fanart'], item['label']])
+                        if 'fanart' in item['art']:
+                            self.items.append([item['art']['fanart'], item['label']])
         # randomize
         if self.slideshow_random:
             random.seed()
-            random.shuffle(self.items, random.random)
+            random.shuffle(self.items)
 
     def _get_offset(self):
         try:
@@ -484,13 +488,12 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             log('failed to save resume point')
 
     def _read_cache(self, hexfile):
-        images = ''
         try:
             cache = xbmcvfs.File(CACHEFILE % hexfile)
-            images = eval(cache.read())
+            images = json.load(cache)
             cache.close()
         except:
-            pass
+            images = []
         return images
 
     def _anim(self, cur_img):
@@ -505,13 +508,13 @@ class Screensaver(xbmcgui.WindowXMLDialog):
         # set zoom level depending on the anim time
         zoom = 110 + anim_time
         if number == 1 or number == 5 or number == 7:
-            posx = int(-1280 + (12.8 * anim_time) + 0.5)
+            posx = int(-1920 + (19.2 * anim_time) + 0.5)
         elif number == 2 or number == 6 or number == 8:
-            posx = int(1280 - (12.8 * anim_time) + 0.5)
+            posx = int(1920 - (19.2 * anim_time) + 0.5)
         if number == 3 or number == 5 or number == 6:
-            posy = int(-720 + (7.2 * anim_time) + 0.5)
+            posy = int(-1080 + (10.8 * anim_time) + 0.5)
         elif number == 4 or number == 7 or number == 8:
-            posy = int(720 - (7.2 * anim_time) + 0.5)
+            posy = int(1080 - (10.8 * anim_time) + 0.5)
         # position the current image
         cur_img.setPosition(posx, posy)
         # add the animation to the current image
@@ -531,7 +534,7 @@ class Screensaver(xbmcgui.WindowXMLDialog):
             log(SKINDIR)
             log(json_query)
             return
-        skinxml = xbmc.translatePath(os.path.join(skinpath, 'addon.xml'))
+        skinxml = xbmcvfs.translatePath(os.path.join(skinpath, 'addon.xml'))
         try:
             # parse the skin addon.xml
             self.xml = parse(skinxml)
@@ -633,4 +636,7 @@ class MyMonitor(xbmc.Monitor):
         self.action = kwargs['action']
 
     def onScreensaverDeactivated(self):
+        self.action()
+
+    def onDPMSActivated(self):
         self.action()

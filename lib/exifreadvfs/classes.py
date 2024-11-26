@@ -8,9 +8,9 @@ from .tags import *
 logger = get_logger()
 
 try:
-    basestring
+    str
 except NameError:
-    basestring = str
+    str = str
 
 class IfdTag:
     """
@@ -232,7 +232,7 @@ class ExifHeader:
                 # now 'values' is either a string or an array
                 if count == 1 and field_type != 2:
                     printable = str(values[0])
-                elif count > 50 and len(values) > 20 and not isinstance(values, basestring) :
+                elif count > 50 and len(values) > 20 and not isinstance(values, str) :
                     if self.truncate_tags :
                         printable = str(values[0:20])[0:-1] + ", ... ]"
                     else:
@@ -241,7 +241,7 @@ class ExifHeader:
                     try:
                         printable = str(values)
                     except UnicodeEncodeError:
-                        printable = unicode(values)
+                        printable = str(values)
                 # compute printable version of values
                 if tag_entry:
                     # optional 2nd tag element is present
@@ -270,7 +270,7 @@ class ExifHeader:
                     tag_value = repr(self.tags[ifd_name + ' ' + tag_name])
                 # fix for python2's handling of unicode values
                 except UnicodeEncodeError:
-                    tag_value = unicode(self.tags[ifd_name + ' ' + tag_name])
+                    tag_value = str(self.tags[ifd_name + ' ' + tag_name])
                 logger.debug(' %s: %s', tag_name, tag_value)
 
             if tag_name == stop_tag:
@@ -511,7 +511,7 @@ class ExifHeader:
         model = str(model.values)
 
         camera_info_tags = None
-        for (model_name_re, tag_desc) in makernote.canon.CAMERA_INFO_MODEL_MAP.items():
+        for (model_name_re, tag_desc) in list(makernote.canon.CAMERA_INFO_MODEL_MAP.items()):
             if re.search(model_name_re, model):
                 camera_info_tags = tag_desc
                 break
@@ -526,7 +526,7 @@ class ExifHeader:
                                   *camera_info_tag.values)
 
         # Look for each data value and decode it appropriately.
-        for offset, tag in camera_info_tags.items():
+        for offset, tag in list(camera_info_tags.items()):
             tag_format = tag[1]
             tag_size = struct.calcsize(tag_format)
             if len(camera_info) < offset + tag_size:
